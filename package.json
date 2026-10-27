@@ -1,0 +1,21 @@
+{
+  "name": "ai-powered-student-progress-tracker",
+  "version": "1.0.0",
+  "description": "AI-Powered Student Progress Tracker with React, Node.js, Supabase, and Google Gemini",
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "test:backend": "npm --prefix backend test",
+    "build:frontend": "npm --prefix frontend run build"
+  },
+  "keywords": [
+    "student-tracker",
+    "academic-progress",
+    "supabase",
+    "react",
+    "gemini-ai",
+    "nodejs"
+  ],
+  "author": "",
+  "license": "MIT"
+}
