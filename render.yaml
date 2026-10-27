@@ -1,0 +1,45 @@
+﻿services:
+  # ── Backend API (Node.js / Express) ────────────────────────────────────────
+  - type: web
+    name: veera-00-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node src/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: FRONTEND_URL
+        sync: false          # set this to your frontend Render URL in the dashboard
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+    healthCheckPath: /api/health
+
+  # ── Frontend (React / Vite) ────────────────────────────────────────────────
+  - type: web
+    name: veera-00-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      - key: VITE_API_BASE_URL
+        sync: false          # set this to your backend Render URL + /api
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

@@ -6,7 +6,8 @@
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix frontend run dev",
     "test:backend": "npm --prefix backend test",
-    "build:frontend": "npm --prefix frontend run build"
+    "build:frontend": "npm --prefix frontend run build",
+    "seed:demo": "cd backend && node ../scripts/seed-demo-user.mjs"
   },
   "keywords": [
     "student-tracker",

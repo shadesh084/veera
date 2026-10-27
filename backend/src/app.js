@@ -41,7 +41,9 @@ app.use(
       if (allowedOrigins.includes(origin) || origin.startsWith('http://localhost:')) {
         return callback(null, true);
       }
-      return callback(null, true); // Permissive in dev, configurable for production
+      // In production, reject unknown origins; in dev stay permissive
+      if (isDev) return callback(null, true);
+      return callback(new Error('CORS: origin not allowed'), false);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -74,15 +76,16 @@ if (process.env.NODE_ENV !== 'test') {
   app.use(morgan(isDev ? 'dev' : 'combined'));
 }
 
-// Health check endpoint
-app.get('/health', (req, res) => {
+// Health check endpoints
+const healthResponse = (res) =>
   res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
     environment: config.nodeEnv,
     version: '1.0.0',
   });
-});
+app.get('/health', (_req, res) => healthResponse(res));
+app.get('/api/health', (_req, res) => healthResponse(res));
 
 // Mount API routes
 app.use('/api/auth', authRoutes);
