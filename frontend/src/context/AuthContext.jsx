@@ -93,6 +93,10 @@ export const AuthProvider = ({ children }) => {
           return;
         }
 
+        // Clean up legacy mock user tokens from localStorage if previously stored
+        localStorage.removeItem('academitrack_dev_user');
+        localStorage.removeItem('academitrack_dev_token');
+
         const { data: { session: initialSession }, error } = await supabase.auth.getSession();
         if (error) throw error;
 
@@ -149,19 +153,37 @@ export const AuthProvider = ({ children }) => {
       return { success: true };
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (error) {
-      throw error;
+      if (error) throw error;
+
+      setSession(data.session);
+      setUser(data.user);
+      await fetchProfile(data.user);
+      return { success: true };
+    } catch (authErr) {
+      // If student@example.com doesn't exist yet, auto-register as fallback
+      if (email === 'student@example.com') {
+        const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+          email: 'student@example.com',
+          password: 'password123',
+          options: {
+            data: { display_name: 'Demo Student' },
+          },
+        });
+        if (!signUpErr && signUpData?.session) {
+          setSession(signUpData.session);
+          setUser(signUpData.user);
+          await fetchProfile(signUpData.user);
+          return { success: true };
+        }
+      }
+      throw authErr;
     }
-
-    setSession(data.session);
-    setUser(data.user);
-    await fetchProfile(data.user);
-    return { success: true };
   };
 
   // Register handler
