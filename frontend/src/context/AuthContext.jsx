@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase, isSupabaseConfigured, API_BASE_URL } from '../config/supabase.js';
+import { supabase, isSupabaseConfigured } from '../config/supabase.js';
 
 const AuthContext = createContext(null);
 
@@ -22,29 +22,52 @@ export const AuthProvider = ({ children }) => {
     return data.session?.access_token || null;
   }, [session]);
 
-  // Fetch or refresh profile from backend
-  const fetchProfile = useCallback(async (token) => {
+  // Fetch or refresh profile directly from Supabase
+  const fetchProfile = useCallback(async (userOrId) => {
     try {
-      const authToken = token || (await getToken());
-      if (!authToken) return null;
-
-      const res = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (res.ok) {
-        const json = await res.json();
-        setProfile(json.data);
-        return json.data;
+      // Accept a user object, a UUID string, or fall back to current session
+      let userId;
+      if (userOrId && typeof userOrId === 'object' && userOrId.id) {
+        userId = userOrId.id;
+      } else if (userOrId && typeof userOrId === 'string' && !userOrId.startsWith('dev-mock') && !userOrId.startsWith('mock')) {
+        // It's a real UUID — get the current user to fetch profile
+        const { data } = await supabase.auth.getUser();
+        userId = data?.user?.id;
+      } else if (!userOrId) {
+        const { data } = await supabase.auth.getUser();
+        userId = data?.user?.id;
       }
+
+      if (!userId) return null;
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (!error && data) {
+        setProfile(data);
+        return data;
+      }
+
+      // Profile row may not exist yet for new users — return a minimal default
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const defaultProfile = {
+        id: userId,
+        email: authUser?.email,
+        display_name: authUser?.user_metadata?.display_name || authUser?.email?.split('@')[0] || 'Student',
+        academic_level: null,
+        institution_name: null,
+        target_percentage: 85.0,
+      };
+      setProfile(defaultProfile);
+      return defaultProfile;
     } catch (err) {
-      console.warn('Could not fetch user profile from API:', err);
+      console.warn('Could not fetch user profile:', err);
     }
     return null;
-  }, [getToken]);
+  }, []);
 
   // Initialize session and listen for auth changes
   useEffect(() => {
@@ -76,8 +99,8 @@ export const AuthProvider = ({ children }) => {
         if (mounted) {
           setSession(initialSession);
           setUser(initialSession?.user ?? null);
-          if (initialSession) {
-            await fetchProfile(initialSession.access_token);
+          if (initialSession?.user) {
+            await fetchProfile(initialSession.user);
           }
         }
       } catch (err) {
@@ -94,8 +117,8 @@ export const AuthProvider = ({ children }) => {
       if (!mounted) return;
       setSession(newSession);
       setUser(newSession?.user ?? null);
-      if (newSession) {
-        await fetchProfile(newSession.access_token);
+      if (newSession?.user) {
+        await fetchProfile(newSession.user);
       } else {
         setProfile(null);
       }
@@ -122,7 +145,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('academitrack_dev_token', token);
       setUser(mockUser);
       setSession({ access_token: token, user: mockUser });
-      await fetchProfile(token);
+      setProfile({ id: mockUser.id, display_name: mockUser.user_metadata?.display_name || mockUser.email?.split('@')[0], target_percentage: 85.0 });
       return { success: true };
     }
 
@@ -137,7 +160,7 @@ export const AuthProvider = ({ children }) => {
 
     setSession(data.session);
     setUser(data.user);
-    await fetchProfile(data.session.access_token);
+    await fetchProfile(data.user);
     return { success: true };
   };
 
@@ -156,7 +179,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('academitrack_dev_token', token);
       setUser(mockUser);
       setSession({ access_token: token, user: mockUser });
-      await fetchProfile(token);
+      setProfile({ id: newUserId, display_name: displayName || mockUser.email?.split('@')[0], target_percentage: 85.0 });
       return { success: true, emailConfirmationRequired: false };
     }
 
@@ -176,7 +199,7 @@ export const AuthProvider = ({ children }) => {
     if (data.session) {
       setSession(data.session);
       setUser(data.user);
-      await fetchProfile(data.session.access_token);
+      await fetchProfile(data.user);
     }
 
     return {
@@ -214,25 +237,22 @@ export const AuthProvider = ({ children }) => {
     setProfile(null);
   };
 
-  // Update profile handler
+  // Update profile handler — writes directly to Supabase
   const updateProfile = async (updates) => {
-    const token = await getToken();
-    const res = await fetch(`${API_BASE_URL}/auth/profile`, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(updates),
-    });
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (!authUser) throw new Error('Not authenticated');
 
-    const json = await res.json();
-    if (!res.ok) {
-      throw new Error(json.error?.message || 'Failed to update profile');
-    }
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', authUser.id)
+      .select()
+      .single();
 
-    setProfile(json.data);
-    return json.data;
+    if (error) throw new Error(error.message || 'Failed to update profile');
+
+    setProfile(data);
+    return data;
   };
 
   const value = {
